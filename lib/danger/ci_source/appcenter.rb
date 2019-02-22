@@ -1,6 +1,6 @@
 # https://docs.microsoft.com/en-us/appcenter/build/custom/variables/
+require "uri"
 require "danger/request_sources/github/github"
-require "danger/request_sources/gitlab"
 
 module Danger
   # ### CI Setup
@@ -26,19 +26,28 @@ module Danger
       return env["BUILD_REASON"] == "PullRequest"
     end
 
+    def self.owner_for_github(env)
+      URI.parse(env["BUILD_REPOSITORY_URI"]).path.split("/")[1]
+    end
+
+    def self.repo_identifier_for_github(env)
+      repo_name = env["BUILD_REPOSITORY_NAME"]
+      owner = owner_for_github(env)
+      "#{owner}/#{repo_name}"
+    end
+
+    def self.pr_from_env(env)
+      Danger::RequestSources::GitHub.new(nil, env).get_pr_from_branch(repo_identifier_for_github(env), env["BUILD_SOURCEBRANCHNAME"], owner_for_github(env))
+    end
+
     def supported_request_sources
-      @supported_request_sources ||= [
-        Danger::RequestSources::GitHub,
-        Danger::RequestSources::GitLab,
-        Danger::RequestSources::BitbucketServer,
-        Danger::RequestSources::BitbucketCloud
-      ]
+      @supported_request_sources ||= [Danger::RequestSources::GitHub]
     end
 
     def initialize(env)
-      self.pull_request_id = env["BITRISE_PULL_REQUEST"]
+      self.pull_request_id = self.class.pr_from_env(env)
       self.repo_url = env["BUILD_REPOSITORY_URI"]
-      self.repo_slug = env["BUILD_REPOSITORY_NAME"]
+      self.repo_slug = self.repo_identifier_for_github(env)
     end
   end
 end
